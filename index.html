@@ -1,0 +1,1343 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>UniSZA Employer & Research Analytics Portal</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
+    <script>
+        // OAUTH SECURITY INJECTIONS
+        const ACTIVE_USER = "<?= typeof userEmail !== 'undefined' ? userEmail : 'Guest User (Sandbox)' ?>";
+        const IS_ADMIN = <?= typeof isAdmin !== 'undefined' ? isAdmin : true ?>; 
+        const SHEET_URL = "<?= typeof sheetUrl !== 'undefined' ? sheetUrl : '#' ?>"; 
+        
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['Plus Jakarta Sans', 'sans-serif'], },
+                    colors: {
+                        unisza: { blue: { DEFAULT: '#0c3c60', dark: '#062237', light: '#145482' }, gold: { DEFAULT: '#cca325', dark: '#9d7c18', light: '#e1b73c' } }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #f1f5f9; border-radius: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        .bg-pattern {
+            background-color: #0c3c60;
+            background-image: radial-gradient(rgba(204, 163, 37, 0.15) 1px, transparent 0), radial-gradient(rgba(204, 163, 37, 0.15) 1px, transparent 0);
+            background-size: 20px 20px; background-position: 0 0, 10px 10px;
+        }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 font-sans min-h-screen flex flex-col">
+
+    <!-- TOP HEADER BAR -->
+    <header class="bg-pattern text-white shadow-xl border-b-4 border-unisza-gold sticky top-0 z-40 transition-all duration-300">
+        <div class="max-w-7xl mx-auto px-4 py-4 sm:px-6 lg:px-8 flex flex-col md:flex-row justify-between items-center gap-4">
+            <div class="flex items-center gap-3">
+                <div class="bg-white p-2 rounded-lg shadow-inner border border-unisza-gold/30">
+                    <svg class="w-10 h-10 text-unisza-blue" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c0 2 2 3 6 3s6-1 6-3v-5"/>
+                    </svg>
+                </div>
+                <div>
+                    <div class="flex items-center gap-2">
+                        <span class="text-xs font-bold tracking-widest uppercase text-unisza-gold bg-unisza-blue-dark px-2 py-0.5 rounded">UniSZA</span>
+                        <span class="text-xs text-slate-300 font-semibold" id="environment-indicator">Loading Auth...</span>
+                    </div>
+                    <h1 class="text-xl md:text-2xl font-extrabold tracking-tight">Employer & Research Network Portal</h1>
+                </div>
+            </div>
+            
+            <div class="flex items-center flex-wrap gap-2 w-full md:w-auto justify-end">
+                <a id="sheet-header-link" href="#" target="_blank" class="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold py-2.5 px-4 rounded-lg shadow-sm transition flex items-center gap-2">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                    <span>Open Sheet</span>
+                </a>
+                <script>document.getElementById('sheet-header-link').href = SHEET_URL;</script>
+                
+                <script>
+                    if(IS_ADMIN) {
+                        document.write(`
+                            <label class="cursor-pointer bg-white/10 hover:bg-white/20 text-white text-xs font-bold py-2.5 px-4 rounded-lg border border-white/20 transition flex items-center gap-2 shadow-sm">
+                                <svg class="w-4 h-4 text-unisza-gold" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
+                                <span>Import CSV</span>
+                                <input type="file" id="csv-file-input" accept=".csv" class="hidden" onchange="handleFileSelect(event)">
+                            </label>
+                            <button onclick="refreshLiveDatabase()" id="btn-sync" class="bg-white/10 hover:bg-white/20 text-white text-xs font-bold py-2.5 px-4 rounded-lg border border-white/20 transition flex items-center gap-2 shadow-sm">
+                                <svg class="w-4 h-4 text-unisza-gold" id="sync-spinner" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 1121.21 15H18.5"/></svg>
+                                <span id="sync-text">Sync Live Data</span>
+                            </button>
+                        `);
+                    }
+                </script>
+                <button onclick="exportDatabase()" class="bg-unisza-gold hover:bg-unisza-gold-dark text-unisza-blue-dark text-xs font-bold py-2.5 px-4 rounded-lg shadow-md transition flex items-center gap-2 border border-unisza-gold-light/20">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+                    <span>Export Data</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <div id="toast-container" class="fixed bottom-5 right-5 z-50 flex flex-col gap-2"></div>
+
+    <main class="flex-grow max-w-7xl w-full mx-auto px-4 py-6 sm:px-6 lg:px-8">
+        
+        <!-- INTRO BANNER -->
+        <div class="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-100 rounded-2xl p-4 md:p-6 mb-6 flex flex-col md:flex-row gap-4 items-center justify-between shadow-sm">
+            <div class="flex items-start gap-4">
+                <div class="bg-blue-600 text-white p-3 rounded-xl hidden sm:block">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                </div>
+                <div>
+                    <h2 class="text-base font-bold text-slate-900">Rankings & Collaborations Dashboard</h2>
+                    <p class="text-sm text-slate-600 mt-1">
+                        Maximize UniSZA's recognition in <strong>QS World Rankings</strong> & <strong>THE WUR</strong>. Identify key industry partners, track MoUs, and monitor global affiliations across international researchers.
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <!-- FULL TAB NAVIGATION -->
+        <div class="border-b border-slate-200 mb-6 overflow-x-auto custom-scrollbar flex">
+            <nav class="flex space-x-2 pb-px" aria-label="Tabs">
+                <button onclick="switchTab('overview')" id="tab-overview" class="tab-btn active px-4 py-3 rounded-t-xl font-bold text-sm border-b-2 border-unisza-blue text-unisza-blue bg-white shadow-sm flex items-center gap-2 transition whitespace-nowrap">
+                    Overview Analytics
+                </button>
+                <button onclick="switchTab('collaborations')" id="tab-collaborations" class="tab-btn px-4 py-3 rounded-t-xl font-medium text-sm text-slate-600 hover:text-slate-900 border-b-2 border-transparent flex items-center gap-2 transition whitespace-nowrap">
+                    Global Collaborations Map
+                </button>
+                <button onclick="switchTab('registry')" id="tab-registry" class="tab-btn px-4 py-3 rounded-t-xl font-medium text-sm text-slate-600 hover:text-slate-900 border-b-2 border-transparent flex items-center gap-2 transition whitespace-nowrap">
+                    MNC Registry
+                </button>
+                <button onclick="switchTab('pipeline')" id="tab-pipeline" class="tab-btn px-4 py-3 rounded-t-xl font-medium text-sm text-slate-600 hover:text-slate-900 border-b-2 border-transparent flex items-center gap-2 transition whitespace-nowrap">
+                    QS/THE Pipeline
+                </button>
+                <button onclick="switchTab('faculty-hub')" id="tab-faculty-hub" class="tab-btn px-4 py-3 rounded-t-xl font-medium text-sm text-slate-600 hover:text-slate-900 border-b-2 border-transparent flex items-center gap-2 transition whitespace-nowrap">
+                    Faculty Alignment Matrix
+                </button>
+                <button onclick="switchTab('planner')" id="tab-planner" class="tab-btn px-4 py-3 rounded-t-xl font-medium text-sm text-slate-600 hover:text-slate-900 border-b-2 border-transparent flex items-center gap-2 transition whitespace-nowrap">
+                    Action Planner & Toolkit
+                </button>
+            </nav>
+        </div>
+
+        <!-- ============================================== -->
+        <!-- TAB 1: EXECUTIVE OVERVIEW -->
+        <!-- ============================================== -->
+        <div id="content-overview" class="tab-panel space-y-6">
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+                <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition">
+                    <span class="text-xs font-bold text-slate-500 uppercase">Target Employers</span>
+                    <div class="mt-2"><span class="text-3xl font-extrabold text-slate-900" id="stat-total-mcn">0</span><span class="text-xs text-slate-400 block mt-1">Companies Tracked</span></div>
+                </div>
+                <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition">
+                    <span class="text-xs font-bold text-slate-500 uppercase">MoU/MoA Signed</span>
+                    <div class="mt-2">
+                        <div class="flex items-baseline gap-2"><span class="text-3xl font-extrabold text-slate-900" id="stat-mou-count">0</span><span class="text-sm font-bold text-green-600" id="stat-mou-pct">0%</span></div>
+                        <span class="text-xs text-slate-400 block mt-1">Formal Collaborations</span>
+                    </div>
+                </div>
+                <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition">
+                    <span class="text-xs font-bold text-slate-500 uppercase">QS Nominees</span>
+                    <div class="mt-2">
+                        <div class="flex items-baseline gap-2"><span class="text-3xl font-extrabold text-slate-900" id="stat-qs-count">0</span><span class="text-sm font-bold text-purple-600" id="stat-qs-pct">0%</span></div>
+                        <span class="text-xs text-slate-400 block mt-1">Submitted for Survey</span>
+                    </div>
+                </div>
+                <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition">
+                    <span class="text-xs font-bold text-slate-500 uppercase">Engagement Rate</span>
+                    <div class="mt-2"><span class="text-3xl font-extrabold text-slate-900" id="stat-engagement-rate">0%</span><span class="text-xs text-slate-400 block mt-1">Of Database Engaged</span></div>
+                </div>
+                <div class="bg-gradient-to-br from-unisza-blue to-unisza-blue-dark text-white p-5 rounded-2xl border border-unisza-blue-dark shadow-md">
+                    <span class="text-xs font-bold text-unisza-gold uppercase tracking-wider">Rankings Impact Score</span>
+                    <div class="mt-2"><span class="text-3xl font-black text-white" id="stat-readiness">0%</span><span class="text-xs text-slate-300 block mt-1">WUR Readiness KPI</span></div>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+                    <div class="flex justify-between items-center mb-4">
+                        <div>
+                            <h3 class="text-base font-bold text-slate-900">THE WUR Subject Coverage Portfolio</h3>
+                            <p class="text-xs text-slate-500">MNC distribution across Times Higher Education subjects</p>
+                        </div>
+                    </div>
+                    <div class="h-64 flex items-center justify-center"><canvas id="chart-wur-subjects"></canvas></div>
+                </div>
+                <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+                    <div class="flex justify-between items-center mb-4">
+                        <div>
+                            <h3 class="text-base font-bold text-slate-900">UniSZA Faculty Alignment</h3>
+                            <p class="text-xs text-slate-500">Primary responsible faculty for managing the relationships</p>
+                        </div>
+                    </div>
+                    <div class="h-64 flex items-center justify-center"><canvas id="chart-faculty"></canvas></div>
+                </div>
+            </div>
+
+            <!-- SMART ACTION ENGINE -->
+            <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+                <div class="flex items-center gap-2 mb-4">
+                    <div class="bg-amber-100 text-amber-800 p-2 rounded-xl">
+                        <svg class="w-5 h-5 animate-pulse" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 18h.01M12 5.071c3.81 0 6.903 3.013 6.903 6.729 0 3.716-3.093 6.73-6.903 6.73-3.81 0-6.903-3.014-6.903-6.73 0-3.716 3.093-6.729 6.903-6.729zm0 0v6.729"/></svg>
+                    </div>
+                    <div>
+                        <h3 class="text-lg font-bold text-slate-900">Rankings Strategic Advisory Console</h3>
+                        <p class="text-xs text-slate-500">Automated actionable gap analysis for the upcoming WUR cycles</p>
+                    </div>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4" id="recommendations-container"></div>
+            </div>
+
+            <div class="bg-gradient-to-b from-slate-900 to-unisza-blue-dark text-white p-6 rounded-2xl shadow-lg border border-unisza-blue">
+                <h3 class="text-lg font-bold text-unisza-gold mb-4">The Strategic Architecture of Rankings & Employer Recognition</h3>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div class="bg-white/5 border border-white/10 p-4 rounded-xl">
+                        <span class="text-2xl font-black text-unisza-gold">15%</span><h4 class="text-sm font-bold text-slate-200 inline ml-2">QS Employer Reputation</h4>
+                        <p class="text-xs text-slate-300 mt-2">Calculated from a global survey asking employers to list preferred universities. UniSZA uploads key contact personnel.</p>
+                    </div>
+                    <div class="bg-white/5 border border-white/10 p-4 rounded-xl">
+                        <span class="text-2xl font-black text-unisza-gold">5.0%</span><h4 class="text-sm font-bold text-slate-200 inline ml-2">QS Employment Outcomes</h4>
+                        <p class="text-xs text-slate-300 mt-2">Measures graduate employment within 15 months. Sustained collaborations with active MNC partners directly ensure career pathways.</p>
+                    </div>
+                    <div class="bg-white/5 border border-white/10 p-4 rounded-xl">
+                        <span class="text-2xl font-black text-unisza-gold">4.0%</span><h4 class="text-sm font-bold text-slate-200 inline ml-2">THE WUR Industry Pillar</h4>
+                        <p class="text-xs text-slate-300 mt-2">Includes Industry Income (2%) and Patents (2%). MoUs must translate to active research funding projects.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ============================================== -->
+        <!-- TAB 2: GLOBAL COLLABORATIONS MAP -->
+        <!-- ============================================== -->
+        <div id="content-collaborations" class="tab-panel space-y-6 hidden">
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+                    <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Global Partner Universities</span>
+                    <span class="text-3xl font-extrabold text-unisza-blue" id="res-stat-univs">0</span>
+                </div>
+                <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+                    <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Active Countries</span>
+                    <span class="text-3xl font-extrabold text-unisza-blue" id="res-stat-countries">0</span>
+                </div>
+                <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+                    <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Unique Researchers</span>
+                    <span class="text-3xl font-extrabold text-unisza-blue" id="res-stat-researchers">0</span>
+                </div>
+                <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+                    <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Total Affiliations</span>
+                    <span class="text-3xl font-extrabold text-unisza-gold" id="res-stat-affiliations">0</span>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+                    <h3 class="text-sm font-bold text-slate-900">Research Network by Faculty</h3>
+                    <p class="text-[10px] text-slate-500 mb-4">Total affiliations categorized by UniSZA Faculty</p>
+                    <div class="h-64"><canvas id="chart-research-faculty"></canvas></div>
+                </div>
+                <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+                    <h3 class="text-sm font-bold text-slate-900">Top 10 Partner Universities</h3>
+                    <p class="text-[10px] text-slate-500 mb-4">Ranked by volume of joint affiliations</p>
+                    <div class="h-64"><canvas id="chart-research-univs"></canvas></div>
+                </div>
+                <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+                    <h3 class="text-sm font-bold text-slate-900">Geographic Spread</h3>
+                    <p class="text-[10px] text-slate-500 mb-4">Top 10 countries globally by affiliations</p>
+                    <div class="h-64"><canvas id="chart-research-countries"></canvas></div>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                <div class="p-4 border-b border-slate-100 flex flex-col md:flex-row justify-between items-center bg-slate-50 gap-4">
+                    <h3 class="text-sm font-bold text-slate-900">Detailed Researcher Database</h3>
+                    <div class="flex gap-2 w-full md:w-auto">
+                        <select id="filter-res-faculty" onchange="renderResearchTable()" class="text-xs rounded-lg border border-slate-200 py-1.5 px-3 focus:outline-none focus:border-unisza-blue bg-white">
+                            <option value="ALL">All Faculties</option>
+                        </select>
+                        <input type="text" id="search-researcher" oninput="renderResearchTable()" placeholder="Search Name or Org..." class="text-xs rounded-lg border border-slate-200 py-1.5 px-3 w-full md:w-64 focus:outline-none focus:border-unisza-blue">
+                    </div>
+                </div>
+                <div class="overflow-x-auto max-h-[500px] custom-scrollbar">
+                    <table class="w-full text-left border-collapse min-w-[800px]">
+                        <thead class="sticky top-0 bg-slate-100 shadow-sm z-10">
+                            <tr class="text-slate-500 uppercase text-[10px] tracking-wider font-extrabold">
+                                <th class="py-3 px-4">Researcher Name</th>
+                                <th class="py-3 px-4">UniSZA Faculty</th>
+                                <th class="py-3 px-4">Organization / University</th>
+                                <th class="py-3 px-4 text-center">Total Affiliations</th>
+                            </tr>
+                        </thead>
+                        <tbody id="research-table-body" class="divide-y divide-slate-100 text-sm"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- ============================================== -->
+        <!-- TAB 3: MNC REGISTRY & DATABASE (MERGED) -->
+        <!-- ============================================== -->
+        <div id="content-registry" class="tab-panel space-y-4 hidden">
+            <!-- FILTERS BAR -->
+            <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+                <div class="flex flex-col md:flex-row gap-4 justify-between items-center">
+                    <div class="w-full md:w-1/3 relative">
+                        <input type="text" id="search-input" oninput="applyFilters()" placeholder="Search company or industry..." class="w-full pl-9 pr-4 py-2 text-sm rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-unisza-blue/20 transition">
+                        <svg class="w-4 h-4 text-slate-400 absolute left-3 top-3" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+                    </div>
+                    <div class="flex flex-wrap gap-2 w-full md:w-auto justify-end" id="add-partner-container">
+                        <script>
+                            if(IS_ADMIN) {
+                                document.write(`
+                                    <button onclick="openAddPartnerModal()" class="bg-unisza-blue hover:bg-unisza-blue-light text-white text-xs font-bold py-2.5 px-4 rounded-lg shadow-sm transition flex items-center gap-2">
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
+                                        Add New Employer Partner
+                                    </button>
+                                `);
+                            }
+                        </script>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 pt-2 border-t border-slate-100">
+                    <div>
+                        <label class="block text-xs font-bold text-slate-500 uppercase mb-1">THE WUR Field</label>
+                        <select id="filter-wur" onchange="applyFilters()" class="w-full text-xs rounded-lg border border-slate-200 py-1.5 px-2 bg-slate-50 focus:outline-none">
+                            <option value="ALL">All Fields</option>
+                            <option value="Arts and Humanities">Arts & Humanities</option>
+                            <option value="Business and Economics">Business & Economics</option>
+                            <option value="Computer Science">Computer Science</option>
+                            <option value="Engineering and Technology">Engineering & Technology</option>
+                            <option value="Clinical and Health">Clinical & Health</option>
+                            <option value="Life Sciences">Life Sciences</option>
+                            <option value="Physical Sciences">Physical Sciences</option>
+                            <option value="Social Sciences">Social Sciences</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Primary Faculty</label>
+                        <select id="filter-faculty" onchange="applyFilters()" class="w-full text-xs rounded-lg border border-slate-200 py-1.5 px-2 bg-slate-50 focus:outline-none">
+                            <option value="ALL">All Faculties</option>
+                            <option value="FPP">FPP (Business)</option>
+                            <option value="FIK">FIK (Computing)</option>
+                            <option value="FRIT">FRIT (Design & Tech)</option>
+                            <option value="FBIM">FBIM (Food Industry)</option>
+                            <option value="FSK">FSK (Health Sciences)</option>
+                            <option value="FPSK">FPSK (Medicine)</option>
+                            <option value="FBK">FBK (Languages)</option>
+                            <option value="FSSG">FSSG (Social Sciences)</option>
+                            <option value="FUHA">FUHA (General Studies)</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-500 uppercase mb-1">MoU/MoA Status</label>
+                        <select id="filter-status" onchange="applyFilters()" class="w-full text-xs rounded-lg border border-slate-200 py-1.5 px-2 bg-slate-50 focus:outline-none">
+                            <option value="ALL">All Statuses</option>
+                            <option value="Targeted">Targeted</option>
+                            <option value="In Discussion">In Discussion</option>
+                            <option value="MoU/MoA Signed">MoU/MoA Signed</option>
+                            <option value="Active Engagement">Active Engagement</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-500 uppercase mb-1">QS Nominee</label>
+                        <select id="filter-qs" onchange="applyFilters()" class="w-full text-xs rounded-lg border border-slate-200 py-1.5 px-2 bg-slate-50 focus:outline-none">
+                            <option value="ALL">All States</option>
+                            <option value="YES">Nominated (Consent Obtained)</option>
+                            <option value="NO">Pending Nomination</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                <div class="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+                    <div>
+                        <h3 class="font-bold text-slate-800">Corporate Directory</h3>
+                        <p class="text-xs text-slate-500" id="table-instruction-text"></p>
+                    </div>
+                </div>
+                <div class="overflow-x-auto custom-scrollbar pb-6">
+                    <table class="w-full text-left border-collapse min-w-[1100px]">
+                        <thead>
+                            <tr class="bg-slate-50 text-slate-400 uppercase text-[10px] tracking-wider font-extrabold border-b border-slate-100">
+                                <th class="py-3 px-4">Company</th>
+                                <th class="py-3 px-4">Industry / WUR</th>
+                                <th class="py-3 px-4">Faculty</th>
+                                <th class="py-3 px-4 w-40">Status</th>
+                                <th class="py-3 px-4 w-40">Actions Dropdown</th>
+                                <th class="py-3 px-4 text-center">QS</th>
+                                <th class="py-3 px-4 text-right">Manage</th>
+                            </tr>
+                        </thead>
+                        <tbody id="registry-table-body" class="divide-y divide-slate-100 text-sm"></tbody>
+                    </table>
+                </div>
+                <div id="table-empty-state" class="hidden p-12 text-center text-slate-500">
+                    <p class="font-bold text-slate-700">No Employers Found</p>
+                    <p class="text-xs text-slate-400 mt-1">Try adjusting your filters.</p>
+                </div>
+                <div class="bg-slate-50 px-5 py-3 border-t border-slate-100 flex justify-between items-center text-xs text-slate-500">
+                    <div>Showing <span class="font-bold text-slate-700" id="filtered-count">0</span> of <span class="font-bold text-slate-700" id="total-count">0</span> partner records</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ============================================== -->
+        <!-- TAB 4: QS/THE PIPELINE -->
+        <!-- ============================================== -->
+        <div id="content-pipeline" class="tab-panel space-y-4 hidden">
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div class="bg-slate-100/70 p-4 rounded-2xl h-[650px] border border-slate-200">
+                    <h4 class="font-bold text-slate-700 text-sm mb-3">1. Targeted</h4>
+                    <div id="col-targeted" class="flex-grow overflow-y-auto space-y-3 custom-scrollbar h-full"></div>
+                </div>
+                <div class="bg-amber-50/50 p-4 rounded-2xl h-[650px] border border-amber-200/55">
+                    <h4 class="font-bold text-amber-900 text-sm mb-3">2. In Discussion</h4>
+                    <div id="col-discussion" class="flex-grow overflow-y-auto space-y-3 custom-scrollbar h-full"></div>
+                </div>
+                <div class="bg-green-50/40 p-4 rounded-2xl h-[650px] border border-green-200/40">
+                    <h4 class="font-bold text-green-900 text-sm mb-3">3. MoU Signed</h4>
+                    <div id="col-mou" class="flex-grow overflow-y-auto space-y-3 custom-scrollbar h-full"></div>
+                </div>
+                <div class="bg-blue-50/40 p-4 rounded-2xl h-[650px] border border-blue-200/40">
+                    <h4 class="font-bold text-blue-900 text-sm mb-3">4. Active Engagement</h4>
+                    <div id="col-active" class="flex-grow overflow-y-auto space-y-3 custom-scrollbar h-full"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ============================================== -->
+        <!-- TAB 5: FACULTY ALIGNMENT MATRIX -->
+        <!-- ============================================== -->
+        <div id="content-faculty-hub" class="tab-panel space-y-6 hidden">
+            <div class="grid grid-cols-1 lg:grid-cols-4 gap-6">
+                <!-- Sidebar selector -->
+                <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col gap-2 shrink-0">
+                    <h3 class="font-bold text-slate-900 text-sm mb-2">Select UniSZA Faculty</h3>
+                    
+                    <button onclick="selectFacultyHub('FPP')" id="hub-btn-FPP" class="hub-tab-btn active w-full flex justify-between items-center p-3 text-left rounded-xl border border-unisza-blue text-unisza-blue font-bold bg-unisza-blue/5 shadow-sm transition">
+                        <span>FPP (Business)</span><span class="text-xs bg-unisza-blue text-white px-2 py-0.5 rounded-full" id="hub-badge-FPP">0</span>
+                    </button>
+                    <button onclick="selectFacultyHub('FIK')" id="hub-btn-FIK" class="hub-tab-btn w-full flex justify-between items-center p-3 text-left rounded-xl border border-transparent hover:bg-slate-50 hover:border-slate-200 text-slate-700 font-medium transition">
+                        <span>FIK (Computing)</span><span class="text-xs bg-slate-200 text-slate-600 px-2 py-0.5 rounded-full" id="hub-badge-FIK">0</span>
+                    </button>
+                    <button onclick="selectFacultyHub('FRIT')" id="hub-btn-FRIT" class="hub-tab-btn w-full flex justify-between items-center p-3 text-left rounded-xl border border-transparent hover:bg-slate-50 hover:border-slate-200 text-slate-700 font-medium transition">
+                        <span>FRIT (Design & Tech)</span><span class="text-xs bg-slate-200 text-slate-600 px-2 py-0.5 rounded-full" id="hub-badge-FRIT">0</span>
+                    </button>
+                    <button onclick="selectFacultyHub('FBIM')" id="hub-btn-FBIM" class="hub-tab-btn w-full flex justify-between items-center p-3 text-left rounded-xl border border-transparent hover:bg-slate-50 hover:border-slate-200 text-slate-700 font-medium transition">
+                        <span>FBIM (Food)</span><span class="text-xs bg-slate-200 text-slate-600 px-2 py-0.5 rounded-full" id="hub-badge-FBIM">0</span>
+                    </button>
+                    <button onclick="selectFacultyHub('FSK')" id="hub-btn-FSK" class="hub-tab-btn w-full flex justify-between items-center p-3 text-left rounded-xl border border-transparent hover:bg-slate-50 hover:border-slate-200 text-slate-700 font-medium transition">
+                        <span>FSK (Health)</span><span class="text-xs bg-slate-200 text-slate-600 px-2 py-0.5 rounded-full" id="hub-badge-FSK">0</span>
+                    </button>
+                    <button onclick="selectFacultyHub('FPSK')" id="hub-btn-FPSK" class="hub-tab-btn w-full flex justify-between items-center p-3 text-left rounded-xl border border-transparent hover:bg-slate-50 hover:border-slate-200 text-slate-700 font-medium transition">
+                        <span>FPSK (Medicine)</span><span class="text-xs bg-slate-200 text-slate-600 px-2 py-0.5 rounded-full" id="hub-badge-FPSK">0</span>
+                    </button>
+                    <button onclick="selectFacultyHub('FBK')" id="hub-btn-FBK" class="hub-tab-btn w-full flex justify-between items-center p-3 text-left rounded-xl border border-transparent hover:bg-slate-50 hover:border-slate-200 text-slate-700 font-medium transition">
+                        <span>FBK (Languages)</span><span class="text-xs bg-slate-200 text-slate-600 px-2 py-0.5 rounded-full" id="hub-badge-FBK">0</span>
+                    </button>
+                    <button onclick="selectFacultyHub('FSSG')" id="hub-btn-FSSG" class="hub-tab-btn w-full flex justify-between items-center p-3 text-left rounded-xl border border-transparent hover:bg-slate-50 hover:border-slate-200 text-slate-700 font-medium transition">
+                        <span>FSSG (Social Sci)</span><span class="text-xs bg-slate-200 text-slate-600 px-2 py-0.5 rounded-full" id="hub-badge-FSSG">0</span>
+                    </button>
+                    <button onclick="selectFacultyHub('FUHA')" id="hub-btn-FUHA" class="hub-tab-btn w-full flex justify-between items-center p-3 text-left rounded-xl border border-transparent hover:bg-slate-50 hover:border-slate-200 text-slate-700 font-medium transition">
+                        <span>FUHA (General)</span><span class="text-xs bg-slate-200 text-slate-600 px-2 py-0.5 rounded-full" id="hub-badge-FUHA">0</span>
+                    </button>
+                </div>
+
+                <!-- Faculty Matrix Overview Panel -->
+                <div class="col-span-3 space-y-6">
+                    <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-6">
+                        <div class="flex items-center justify-between pb-4 border-b border-slate-100 flex-wrap gap-4">
+                            <div>
+                                <h3 class="text-lg font-bold text-slate-900" id="faculty-hub-title">Fakulti Perniagaan dan Pengurusan (FPP)</h3>
+                                <p class="text-xs text-slate-500">Industry alignment and Cross-disciplinary relationship analysis</p>
+                            </div>
+                            <div class="flex items-center gap-3">
+                                <div class="bg-slate-50 p-3 rounded-xl border text-center">
+                                    <span class="text-2xl font-extrabold text-unisza-blue block" id="hub-val-active">0</span>
+                                    <span class="text-[9px] font-bold text-slate-400 uppercase">Active Partners</span>
+                                </div>
+                                <div class="bg-slate-50 p-3 rounded-xl border text-center">
+                                    <span class="text-2xl font-extrabold text-purple-700 block" id="hub-val-nominated">0</span>
+                                    <span class="text-[9px] font-bold text-slate-400 uppercase">QS Nominees</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div class="space-y-3">
+                                <h4 class="text-xs font-extrabold text-slate-400 uppercase tracking-widest flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-unisza-blue"></span>Primary Partnerships</h4>
+                                <div id="hub-primary-list" class="space-y-2 max-h-72 overflow-y-auto custom-scrollbar pr-1"></div>
+                            </div>
+                            <div class="space-y-3">
+                                <h4 class="text-xs font-extrabold text-slate-400 uppercase tracking-widest flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-unisza-gold"></span>Cross-Disciplinary (Rentas)</h4>
+                                <div id="hub-cross-list" class="space-y-2 max-h-72 overflow-y-auto custom-scrollbar pr-1"></div>
+                            </div>
+                        </div>
+
+                        <div class="bg-slate-50 p-4 rounded-xl border border-slate-100">
+                            <h4 class="text-xs font-bold text-slate-800 uppercase tracking-wider mb-2">Faculty Strategic Gap Audit</h4>
+                            <div id="faculty-hub-gap" class="text-xs text-slate-600 leading-relaxed"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ============================================== -->
+        <!-- TAB 6: ACTION PLANNER & TOOLKIT -->
+        <!-- ============================================== -->
+        <div id="content-planner" class="tab-panel space-y-6 hidden">
+            <!-- CAMPAIGN ROADMAP TIMELINE -->
+            <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-6">
+                <div>
+                    <h3 class="text-base font-bold text-slate-900">UniSZA QS & THE Annual Preparation Timeline</h3>
+                    <p class="text-xs text-slate-500">Chronological phases for employer nominations, engagement, and survey campaigns</p>
+                </div>
+                <div class="relative border-l-2 border-slate-200 ml-4 space-y-8 py-2">
+                    <div class="relative pl-6">
+                        <div class="absolute -left-1.5 top-1 bg-unisza-blue text-white rounded-full w-3.5 h-3.5 border-2 border-white"></div>
+                        <div class="flex items-center gap-2 mb-1 flex-wrap"><span class="text-xs font-bold text-unisza-blue bg-unisza-blue/5 px-2 py-0.5 rounded">Phase 1 (July - Oct)</span><h4 class="font-bold text-slate-800 text-sm">Industrial Database Mapping & Cleanse</h4></div>
+                        <p class="text-xs text-slate-500">Map existing and targeted MNCs to primary THE WUR subject areas. Validate contact directories.</p>
+                    </div>
+                    <div class="relative pl-6">
+                        <div class="absolute -left-1.5 top-1 bg-unisza-blue text-white rounded-full w-3.5 h-3.5 border-2 border-white"></div>
+                        <div class="flex items-center gap-2 mb-1 flex-wrap"><span class="text-xs font-bold text-unisza-blue bg-unisza-blue/5 px-2 py-0.5 rounded">Phase 2 (Nov - Jan)</span><h4 class="font-bold text-slate-800 text-sm">MoU Formalization & Engagement</h4></div>
+                        <p class="text-xs text-slate-500">Convert targets to official MoUs. Bring corporate leaders into advisory boards or joint workshops.</p>
+                    </div>
+                    <div class="relative pl-6">
+                        <div class="absolute -left-1.5 top-1 bg-unisza-gold text-white rounded-full w-3.5 h-3.5 border-2 border-white"></div>
+                        <div class="flex items-center gap-2 mb-1 flex-wrap"><span class="text-xs font-bold text-unisza-gold bg-unisza-gold/5 px-2 py-0.5 rounded-full">Phase 3 (Jan - Feb)</span><h4 class="font-bold text-slate-800 text-sm">Consent Acquisition Drive</h4><span class="text-[9px] bg-amber-100 text-amber-800 font-bold px-1.5 py-0.5 rounded">CRITICAL STAGE</span></div>
+                        <p class="text-xs text-slate-500">Reach out using UniSZA templates to request consent to nominate partners to QS/THE.</p>
+                    </div>
+                    <div class="relative pl-6">
+                        <div class="absolute -left-1.5 top-1 bg-slate-300 rounded-full w-3.5 h-3.5 border-2 border-white"></div>
+                        <div class="flex items-center gap-2 mb-1 flex-wrap"><span class="text-xs font-bold text-slate-600 bg-slate-100 px-2 py-0.5 rounded">Phase 4 (Feb - March)</span><h4 class="font-bold text-slate-800 text-sm">QS Partner Portal Submission</h4></div>
+                        <p class="text-xs text-slate-500">Compile contacts into Excel format required by QS Hub and upload before closures.</p>
+                    </div>
+                    <div class="relative pl-6">
+                        <div class="absolute -left-1.5 top-1 bg-slate-300 rounded-full w-3.5 h-3.5 border-2 border-white"></div>
+                        <div class="flex items-center gap-2 mb-1 flex-wrap"><span class="text-xs font-bold text-slate-600 bg-slate-100 px-2 py-0.5 rounded">Phase 5 (April - June)</span><h4 class="font-bold text-slate-800 text-sm">Follow-Up Coordination</h4></div>
+                        <p class="text-xs text-slate-500">Coordinate reminder emails asking contacts to check their inboxes for survey links.</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- EMAIL TOOLKIT -->
+            <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-6">
+                <div>
+                    <h3 class="text-base font-bold text-slate-900">MNC Consent Communication Email Toolkit</h3>
+                    <p class="text-xs text-slate-500">Templates optimized for obtaining immediate consent from senior executives.</p>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div class="border border-slate-200 p-4 rounded-xl space-y-3 relative bg-slate-50/50">
+                        <div class="flex justify-between items-center pb-2 border-b">
+                            <span class="text-xs font-bold text-slate-700">English Template</span>
+                            <button onclick="copyTemplate('en-tpl')" class="text-xs text-unisza-blue hover:underline font-bold flex items-center gap-1"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"/></svg> Copy Text</button>
+                        </div>
+                        <div class="text-xs text-slate-600 space-y-2 leading-relaxed h-72 overflow-y-auto custom-scrollbar pr-1" id="en-tpl">
+                            <p><strong>Subject:</strong> Invitation to Be Nominated as UniSZA Global Industry Peer Representative</p>
+                            <p>Dear [Partner's Name],</p>
+                            <p>I hope this email finds you well.</p>
+                            <p>As a highly valued industrial collaborator of Universiti Sultan Zainal Abidin (UniSZA), we are deeply appreciative of your continued support towards [Internship placements / Guest Lectures / Joint Advisory Boards] aligned with [Faculty Acronym, e.g., FPP].</p>
+                            <p>In our commitment to benchmark our academic and graduate quality on a global scale, we would be deeply honored to nominate you as a Global Industry Representative for the upcoming QS World University Rankings Global Employer Survey.</p>
+                            <p>If you consent, UniSZA will upload your professional contact information to the official QS Hub. QS will then send a brief survey link asking you to rate universities in your sector.</p>
+                            <p>To confirm your consent, please click reply to this email with: <strong>"I consent to be nominated by UniSZA."</strong></p>
+                            <p>Thank you for partnering with UniSZA in shaping future global graduates.</p>
+                            <p>Warm regards,<br>[Your Name]<br>Strategic Planning, UniSZA</p>
+                        </div>
+                    </div>
+                    <div class="border border-slate-200 p-4 rounded-xl space-y-3 relative bg-slate-50/50">
+                        <div class="flex justify-between items-center pb-2 border-b">
+                            <span class="text-xs font-bold text-slate-700">Malay Template</span>
+                            <button onclick="copyTemplate('my-tpl')" class="text-xs text-unisza-blue hover:underline font-bold flex items-center gap-1"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"/></svg> Copy Text</button>
+                        </div>
+                        <div class="text-xs text-slate-600 space-y-2 leading-relaxed h-72 overflow-y-auto custom-scrollbar pr-1" id="my-tpl">
+                            <p><strong>Subjek:</strong> Pelawaan Pencalonan Rakan Industri UniSZA dalam Tinjauan Reputasi Majikan Global</p>
+                            <p>Merujuk kepada perkara di atas, semoga Tuan/Puan berada dalam keadaan sihat sejahtera.</p>
+                            <p>Pihak Universiti Sultan Zainal Abidin (UniSZA) ingin merakamkan ucapan setinggi-tinggi terima kasih atas jalinan kerjasama industri yang erat antara agensi Tuan/Puan dengan UniSZA khususnya dalam jalinan latihan industri, panel penasihat kurikulum dan pembangunan bakat pelajar bagi [Nama Fakulti].</p>
+                            <p>Bagi memperkukuh pengiktirafan graduan UniSZA di persada global, pihak universiti berbesar hati untuk mencalonkan Tuan/Puan sebagai Penilai Majikan Global bagi Tinjauan Reputasi Majikan QS World University Rankings.</p>
+                            <p>Pihak QS akan menghantar pautan maklum balas ringkas ke alamat e-mel korporat Tuan/Puan. Maklum balas daripada Tuan/Puan adalah sangat penting dalam menilai tahap kebolehpasaran graduan UniSZA.</p>
+                            <p>Sekiranya bersetuju, mohon maklum balas kepada e-mel ini dengan kenyataan: <strong>"Saya bersetuju dicalonkan oleh UniSZA."</strong></p>
+                            <p>Sokongan berterusan Tuan/Puan amat kami hargai.</p>
+                            <p>Sekian, terima kasih.<br>[Nama Anda]<br>Bahagian Perancangan Strategik, UniSZA</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+                <h3 class="text-base font-bold text-slate-900">Rankings Readiness Institutional Checklist</h3>
+                <div class="space-y-2.5">
+                    <label class="flex items-start gap-3 p-3 border border-slate-100 rounded-xl hover:bg-slate-50 cursor-pointer transition">
+                        <input type="checkbox" checked class="mt-1 h-4 w-4 text-unisza-blue focus:ring-unisza-blue border-slate-300 rounded">
+                        <div>
+                            <span class="text-xs font-bold text-slate-800 block">Verify Contact Email Quality</span>
+                            <span class="text-xs text-slate-400">QS does not accept generic addresses (e.g. info@ or admin@). Use a corporate domain.</span>
+                        </div>
+                    </label>
+                    <label class="flex items-start gap-3 p-3 border border-slate-100 rounded-xl hover:bg-slate-50 cursor-pointer transition">
+                        <input type="checkbox" checked class="mt-1 h-4 w-4 text-unisza-blue focus:ring-unisza-blue border-slate-300 rounded">
+                        <div>
+                            <span class="text-xs font-bold text-slate-800 block">Obtain Consent Records (written audit trial)</span>
+                            <span class="text-xs text-slate-400">Ensure a written record or reply is saved. Required for QS audits.</span>
+                        </div>
+                    </label>
+                    <label class="flex items-start gap-3 p-3 border border-slate-100 rounded-xl hover:bg-slate-50 cursor-pointer transition">
+                        <input type="checkbox" class="mt-1 h-4 w-4 text-unisza-blue focus:ring-unisza-blue border-slate-300 rounded">
+                        <div>
+                            <span class="text-xs font-bold text-slate-800 block">Validate Engagement Timeline (Last 24 Months)</span>
+                            <span class="text-xs text-slate-400">QS surveys require active interactions within the past 2 years.</span>
+                        </div>
+                    </label>
+                    <label class="flex items-start gap-3 p-3 border border-slate-100 rounded-xl hover:bg-slate-50 cursor-pointer transition">
+                        <input type="checkbox" class="mt-1 h-4 w-4 text-unisza-blue focus:ring-unisza-blue border-slate-300 rounded">
+                        <div>
+                            <span class="text-xs font-bold text-slate-800 block">Upload Complete Portal Forms to QS Hub</span>
+                            <span class="text-xs text-slate-400">Execute upload exactly matching QS parameters prior to the annual deadline.</span>
+                        </div>
+                    </label>
+                </div>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- FULL CRUD MODAL -->
+    <div id="partner-modal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 opacity-0 pointer-events-none transition-all duration-300">
+        <div class="bg-white rounded-2xl border max-w-lg w-full shadow-2xl overflow-hidden scale-95 transition-all duration-300" id="modal-card">
+            <div class="bg-pattern p-5 text-white border-b border-unisza-gold/30">
+                <div class="flex justify-between items-center">
+                    <h3 id="modal-title" class="text-base font-bold">Add Employer Partner</h3>
+                    <button onclick="closePartnerModal()" class="text-white/60 hover:text-white transition"><svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg></button>
+                </div>
+            </div>
+            
+            <form id="partner-form" onsubmit="savePartner(event)" class="p-5 space-y-4 max-h-[500px] overflow-y-auto custom-scrollbar">
+                <input type="hidden" id="partner-id">
+                
+                <div>
+                    <label class="block text-xs font-bold text-slate-600 mb-1 uppercase tracking-wide">Syarikat / Company Name <span class="text-rose-500">*</span></label>
+                    <input type="text" id="p-name" required placeholder="e.g. Accenture Malaysia" class="w-full text-xs rounded-lg border border-slate-200 py-2 px-3 focus:outline-none focus:ring-2 focus:ring-unisza-blue/10">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-600 mb-1 uppercase tracking-wide">Main Field / Industry Segment <span class="text-rose-500">*</span></label>
+                    <input type="text" id="p-industry" required placeholder="e.g. IT Consulting & Advisory" class="w-full text-xs rounded-lg border border-slate-200 py-2 px-3 focus:outline-none focus:ring-2 focus:ring-unisza-blue/10">
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs font-bold text-slate-600 mb-1 uppercase tracking-wide">THE WUR Field <span class="text-rose-500">*</span></label>
+                        <select id="p-wur" required class="w-full text-xs rounded-lg border border-slate-200 py-2 px-3 focus:outline-none bg-slate-50">
+                            <option value="Arts and Humanities">Arts and Humanities</option>
+                            <option value="Business and Economics">Business and Economics</option>
+                            <option value="Computer Science">Computer Science</option>
+                            <option value="Engineering and Technology">Engineering and Technology</option>
+                            <option value="Clinical and Health">Clinical and Health</option>
+                            <option value="Life Sciences">Life Sciences</option>
+                            <option value="Physical Sciences">Physical Sciences</option>
+                            <option value="Social Sciences">Social Sciences</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-600 mb-1 uppercase tracking-wide">Primary Faculty <span class="text-rose-500">*</span></label>
+                        <select id="p-faculty" required class="w-full text-xs rounded-lg border border-slate-200 py-2 px-3 focus:outline-none bg-slate-50">
+                            <option value="FPP">FPP (Business)</option>
+                            <option value="FIK">FIK (Computing)</option>
+                            <option value="FRIT">FRIT (Design & Tech)</option>
+                            <option value="FBIM">FBIM (Food Industry)</option>
+                            <option value="FSK">FSK (Health Sciences)</option>
+                            <option value="FPSK">FPSK (Medicine)</option>
+                            <option value="FBK">FBK (Languages)</option>
+                            <option value="FSSG">FSSG (Social Sciences)</option>
+                            <option value="FUHA">FUHA (General Studies)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-bold text-slate-600 mb-1 uppercase tracking-wide">Cross Disciplinary / Rentas Bidang</label>
+                    <input type="text" id="p-cross" placeholder="e.g. FIK / FBK" class="w-full text-xs rounded-lg border border-slate-200 py-2 px-3 focus:outline-none focus:ring-2 focus:ring-unisza-blue/10">
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs font-bold text-slate-600 mb-1 uppercase tracking-wide">Relationship Status</label>
+                        <select id="p-status" class="w-full text-xs rounded-lg border border-slate-200 py-2 px-3 focus:outline-none bg-slate-50">
+                            <option value="Targeted">Targeted</option>
+                            <option value="In Discussion">In Discussion</option>
+                            <option value="MoU/MoA Signed">MoU/MoA Signed</option>
+                            <option value="Active Engagement">Active Engagement</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-600 mb-1 uppercase tracking-wide">Action Details</label>
+                        <select id="p-action-drp" class="w-full text-xs rounded-lg border border-slate-200 py-2 px-3 focus:outline-none bg-slate-50">
+                            <option value="Initial Outreach">Initial Outreach</option>
+                            <option value="Meeting Scheduled">Meeting Scheduled</option>
+                            <option value="Drafting Agreement">Drafting Agreement</option>
+                            <option value="Finalizing MoU">Finalizing MoU</option>
+                            <option value="Joint Program">Joint Program</option>
+                            <option value="Follow-up Required">Follow-up Required</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="flex items-center pt-2 pl-1 border-t border-slate-100">
+                    <label class="flex items-center gap-2 cursor-pointer text-xs font-bold text-slate-700">
+                        <input type="checkbox" id="p-qs" class="h-4 w-4 text-unisza-blue focus:ring-unisza-blue border-slate-300 rounded">
+                        <span>QS Nominee Consent Acquired</span>
+                    </label>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs font-bold text-slate-600 mb-1 uppercase tracking-wide">Contact Person Name</label>
+                        <input type="text" id="p-contact" placeholder="e.g. Tan Sri David" class="w-full text-xs rounded-lg border border-slate-200 py-2 px-3 focus:outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-600 mb-1 uppercase tracking-wide">Corporate Contact Email</label>
+                        <input type="email" id="p-email" placeholder="e.g. ceo@accenture.my" class="w-full text-xs rounded-lg border border-slate-200 py-2 px-3 focus:outline-none">
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs font-bold text-slate-600 mb-1 uppercase tracking-wide">Action Description Notes</label>
+                        <input type="text" id="p-action-notes" placeholder="e.g. Discussing MoA" class="w-full text-xs rounded-lg border border-slate-200 py-2 px-3 focus:outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-600 mb-1 uppercase tracking-wide">Last Action Date</label>
+                        <input type="date" id="p-date" class="w-full text-xs rounded-lg border border-slate-200 py-2 px-3 focus:outline-none">
+                    </div>
+                </div>
+
+                <div class="pt-4 flex justify-end gap-2 border-t">
+                    <button type="button" onclick="closePartnerModal()" class="text-xs font-bold py-2 px-4 rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 transition">Cancel</button>
+                    <button type="submit" class="text-xs font-bold py-2 px-4 rounded-lg bg-unisza-blue text-white hover:bg-unisza-blue-light transition">Save Changes</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- MAIN INTERACTIVE APP STATE JAVASCRIPT -->
+    <script>
+        let mncs = [];
+        let researchData = { rankUniversity: [], researcherCollaborator: [], uniCountryResearcher: [], countryResearcher: [], universityCollaborator: [], countryAffiliation: [] };
+
+        const EN_STATUS_OPTIONS = ['Targeted', 'In Discussion', 'MoU/MoA Signed', 'Active Engagement'];
+        const EN_ACTION_OPTIONS = ['Initial Outreach', 'Meeting Scheduled', 'Drafting Agreement', 'Finalizing MoU', 'Joint Program', 'Follow-up Required'];
+
+        let wurChart, facultyChart, topUnivChart, topCountryChart, resFacultyChart = null;
+        let activeHubFaculty = 'FPP';
+        let isGoogleScriptActive = false;
+
+        function generateMockData() {
+            mncs = [
+                { id: 1, name: "Veritas Design Group", industry: "Architecture", wurField: "Arts and Humanities", primaryFaculty: "FRIT", status: "MoU/MoA Signed", action: "Joint Program", qsNominated: true },
+                { id: 2, name: "Accenture Malaysia", industry: "IT Consulting", wurField: "Business and Economics", primaryFaculty: "FPP", status: "Active Engagement", action: "Follow-up Required", qsNominated: true }
+            ];
+            researchData = {
+                rankUniversity: [{ org: 'Universiti Malaya', researcher: 'Dr. Ahmad bin Ali', sum: 45 }],
+                universityCollaborator: [{ univ: 'Universiti Malaya', sum: 150, country: 'Malaysia' }],
+                countryAffiliation: [{ country: 'Malaysia', sum: 540 }],
+                countryResearcher: [{ country: 'Malaysia', researcher: 'Dr. Ahmad bin Ali', faculty: 'FIK', count: 45 }]
+            };
+        }
+
+        window.onload = function() {
+            const userTag = IS_ADMIN ? `<span class="bg-emerald-500/20 text-emerald-400 text-[10px] px-1.5 py-0.5 rounded font-bold ml-1 border border-emerald-500/30">Admin</span>` : `<span class="bg-slate-500/20 text-slate-300 text-[10px] px-1.5 py-0.5 rounded font-bold ml-1 border border-slate-500/30">Viewer</span>`;
+            document.getElementById('environment-indicator').innerHTML = `${ACTIVE_USER} ${userTag}`;
+            
+            const tableMsg = document.getElementById('table-instruction-text');
+            if(tableMsg) tableMsg.textContent = IS_ADMIN ? "Edit Status/Actions inline via drop-downs, or click Edit to update contact profiles." : "You have view-only access. Dropdowns are disabled.";
+
+            if (typeof google !== 'undefined' && google.script && google.script.run) {
+                isGoogleScriptActive = true;
+                refreshLiveDatabase();
+            } else {
+                generateMockData();
+                refreshDashboard();
+                showToast("Running Sandbox Mock DB.");
+            }
+        };
+
+        async function refreshLiveDatabase() {
+            if (!isGoogleScriptActive) return;
+            const spinner = document.getElementById('sync-spinner');
+            const text = document.getElementById('sync-text');
+            if (spinner) spinner.classList.add('animate-spin');
+            if (text) text.textContent = "Synchronizing...";
+
+            try {
+                const [mncRes, researchRes] = await Promise.all([
+                    new Promise((res, rej) => google.script.run.withSuccessHandler(res).withFailureHandler(rej).getMncData()),
+                    new Promise((res, rej) => google.script.run.withSuccessHandler(res).withFailureHandler(rej).getResearchData())
+                ]);
+                if (mncRes) mncs = mncRes;
+                if (researchRes) researchData = researchRes;
+
+                refreshDashboard();
+                populateFilters();
+                
+                if (spinner) spinner.classList.remove('animate-spin');
+                if (text) text.textContent = "Sync Live Data";
+            } catch (err) {
+                if (spinner) spinner.classList.remove('animate-spin');
+                if (text) text.textContent = "Sync Failed";
+                showToast("Sync Error: " + err.message, "ERROR");
+            }
+        }
+
+        function populateFilters() {
+            const facSelect = document.getElementById('filter-res-faculty');
+            if(!facSelect) return;
+            const uniqueFaculties = [...new Set((researchData.countryResearcher || []).map(r => r.faculty))].filter(f => f);
+            facSelect.innerHTML = '<option value="ALL">All Faculties</option>';
+            uniqueFaculties.sort().forEach(fac => {
+                const opt = document.createElement('option'); opt.value = fac; opt.textContent = fac; facSelect.appendChild(opt);
+            });
+        }
+
+        function switchTab(tabId) {
+            document.querySelectorAll('.tab-btn').forEach(btn => {
+                btn.classList.remove('active', 'border-unisza-blue', 'text-unisza-blue', 'bg-white', 'shadow-sm');
+                btn.classList.add('border-transparent', 'text-slate-600');
+            });
+            document.querySelectorAll('.tab-panel').forEach(panel => panel.classList.add('hidden'));
+
+            const activeBtn = document.getElementById(`tab-${tabId}`);
+            if(activeBtn) {
+                activeBtn.classList.add('active', 'border-unisza-blue', 'text-unisza-blue', 'bg-white', 'shadow-sm');
+                activeBtn.classList.remove('border-transparent', 'text-slate-600');
+            }
+            const activePanel = document.getElementById(`content-${tabId}`);
+            if(activePanel) activePanel.classList.remove('hidden');
+            
+            if (tabId === 'overview') setTimeout(renderMncCharts, 50);
+            if (tabId === 'collaborations') setTimeout(renderResearchCharts, 50);
+        }
+
+        function refreshDashboard() {
+            renderOverviewKPIs();
+            renderResearchKPIs();
+            renderMncCharts();
+            renderResearchCharts();
+            renderRegistryTable(); // Using the filtered version
+            renderKanbanPipeline();
+            renderResearchTable();
+            renderFacultyHub();
+            generateAdvisoryRecommendations();
+            updateFacultyBadgeCounts();
+        }
+
+        // ---------- UI: OVERVIEW / MNC CHARTS ----------
+        function renderOverviewKPIs() {
+            const total = mncs.length;
+            const mous = mncs.filter(m => m.status === 'MoU/MoA Signed' || m.status === 'Active Engagement').length;
+            const qs = mncs.filter(m => m.qsNominated).length;
+            const engaged = mncs.filter(m => m.status !== 'Targeted').length;
+
+            document.getElementById('stat-total-mcn').textContent = total;
+            document.getElementById('stat-mou-count').textContent = mous;
+            document.getElementById('stat-mou-pct').textContent = total > 0 ? `${Math.round((mous/total)*100)}%` : '0%';
+            document.getElementById('stat-qs-count').textContent = qs;
+            document.getElementById('stat-qs-pct').textContent = total > 0 ? `${Math.round((qs/total)*100)}%` : '0%';
+            document.getElementById('stat-engagement-rate').textContent = total > 0 ? `${Math.round((engaged/total)*100)}%` : '0%';
+
+            const subjectsActive = new Set(mncs.map(m => m.wurField)).size;
+            const readinessValue = Math.round((((subjectsActive/8) * 0.40) + ((qs/(total||1)) * 0.35) + ((mous/(total||1)) * 0.25)) * 100);
+            document.getElementById('stat-readiness').textContent = `${readinessValue}%`;
+        }
+
+        function renderMncCharts() {
+            if (wurChart) wurChart.destroy();
+            if (facultyChart) facultyChart.destroy();
+
+            const wurFields = ["Arts and Humanities", "Business and Economics", "Computer Science", "Engineering and Technology", "Clinical and Health", "Life Sciences", "Physical Sciences", "Social Sciences"];
+            const wurCounts = wurFields.map(field => mncs.filter(m => m.wurField === field).length);
+            const badgeEl = document.getElementById('badge-total-subjects');
+            if(badgeEl) badgeEl.textContent = `${wurFields.filter((f, i) => wurCounts[i] > 0).length} of 8 Mapped`;
+
+            const faculties = ['FPP', 'FIK', 'FRIT', 'FBIM', 'FSK', 'FPSK', 'FBK', 'FSSG', 'FUHA'];
+            const facultyCounts = faculties.map(fac => mncs.filter(m => m.primaryFaculty === fac).length);
+
+            const ctxWur = document.getElementById('chart-wur-subjects');
+            if(ctxWur) wurChart = new Chart(ctxWur.getContext('2d'), { type: 'bar', data: { labels: wurFields, datasets: [{ data: wurCounts, backgroundColor: '#145482', borderRadius: 4 }] }, options: { responsive: true, maintainAspectRatio: false, indexAxis: 'y', plugins: { legend: { display: false } } } });
+
+            const ctxFac = document.getElementById('chart-faculty');
+            if(ctxFac) facultyChart = new Chart(ctxFac.getContext('2d'), { type: 'bar', data: { labels: faculties, datasets: [{ data: facultyCounts, backgroundColor: '#0c3c60', borderRadius: 4 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } } });
+        }
+
+        // ---------- UI: MNC REGISTRY & FILTERS ----------
+        function applyFilters() { renderRegistryTable(); }
+
+        function renderRegistryTable() {
+            const tbody = document.getElementById('registry-table-body');
+            if(!tbody) return;
+            
+            const searchVal = document.getElementById('search-input') ? document.getElementById('search-input').value.toLowerCase() : "";
+            const filterWur = document.getElementById('filter-wur') ? document.getElementById('filter-wur').value : "ALL";
+            const filterFac = document.getElementById('filter-faculty') ? document.getElementById('filter-faculty').value : "ALL";
+            const filterStat = document.getElementById('filter-status') ? document.getElementById('filter-status').value : "ALL";
+            const filterQs = document.getElementById('filter-qs') ? document.getElementById('filter-qs').value : "ALL";
+
+            const filtered = mncs.filter(m => {
+                const matchesSearch = m.name.toLowerCase().includes(searchVal) || m.industry.toLowerCase().includes(searchVal);
+                const matchesWur = filterWur === 'ALL' || m.wurField === filterWur;
+                const matchesFac = filterFac === 'ALL' || m.primaryFaculty === filterFac;
+                const matchesStat = filterStat === 'ALL' || m.status === filterStat;
+                const matchesQs = filterQs === 'ALL' || (filterQs === 'YES' ? m.qsNominated : !m.qsNominated);
+                return matchesSearch && matchesWur && matchesFac && matchesStat && matchesQs;
+            });
+
+            if(document.getElementById('filtered-count')) document.getElementById('filtered-count').textContent = filtered.length;
+            if(document.getElementById('total-count')) document.getElementById('total-count').textContent = mncs.length;
+
+            const emptyState = document.getElementById('table-empty-state');
+            if (filtered.length === 0) {
+                if(emptyState) emptyState.classList.remove('hidden');
+                tbody.innerHTML = '';
+                return;
+            }
+            if(emptyState) emptyState.classList.add('hidden');
+
+            tbody.innerHTML = '';
+            const disabledAttr = IS_ADMIN ? '' : 'disabled class="opacity-60 cursor-not-allowed text-xs border border-slate-200 rounded p-1.5 bg-slate-50 w-full"';
+            const activeClass = IS_ADMIN ? 'class="text-xs border border-slate-200 rounded p-1.5 bg-white cursor-pointer w-full focus:outline-none focus:ring-1 focus:ring-unisza-blue hover:border-unisza-blue"' : '';
+
+            filtered.forEach(item => {
+                const tr = document.createElement('tr');
+                tr.className = "border-b border-slate-100 hover:bg-slate-50 transition-colors";
+                
+                const statusOptions = EN_STATUS_OPTIONS.map(opt => `<option value="${opt}" ${item.status === opt ? 'selected' : ''}>${opt}</option>`).join('');
+                const actionOptions = EN_ACTION_OPTIONS.map(opt => `<option value="${opt}" ${item.action === opt ? 'selected' : ''}>${opt}</option>`).join('');
+                
+                const qsIcon = item.qsNominated 
+                    ? '<span class="inline-flex items-center text-purple-700 bg-purple-50 px-2 py-0.5 rounded text-[10px] font-bold gap-1"><span class="w-1.5 h-1.5 rounded-full bg-purple-500"></span>Yes</span>'
+                    : '<span class="inline-flex items-center text-slate-400 bg-slate-100 px-2 py-0.5 rounded text-[10px] font-medium">No</span>';
+
+                let actionBtns = '';
+                if(IS_ADMIN) {
+                    actionBtns = `
+                        <button onclick="editPartner(${item.id})" class="text-unisza-blue hover:text-white border border-unisza-blue hover:bg-unisza-blue text-[10px] px-2 py-1 rounded transition">Edit</button>
+                        <button onclick="deletePartner(${item.id})" class="text-rose-600 hover:text-white border border-rose-600 hover:bg-rose-600 text-[10px] px-2 py-1 rounded transition">Del</button>
+                    `;
+                }
+
+                tr.innerHTML = `
+                    <td class="py-3 px-4 font-bold text-slate-800 text-xs">
+                        ${item.name}
+                        <div class="text-[9px] text-slate-400 font-normal mt-0.5">${item.contactName || 'No Contact Info'}</div>
+                    </td>
+                    <td class="py-3 px-4 text-xs">${item.industry}<br><span class="text-[9px] text-slate-400">${item.wurField}</span></td>
+                    <td class="py-3 px-4 text-xs font-bold text-unisza-blue">${item.primaryFaculty}</td>
+                    <td class="py-3 px-4 w-40">
+                        <select onchange="updateMncField(${item.id}, 'status', this.value)" ${disabledAttr || activeClass}>${statusOptions}</select>
+                    </td>
+                    <td class="py-3 px-4 w-40">
+                        <select onchange="updateMncField(${item.id}, 'action', this.value)" ${disabledAttr || activeClass}>${actionOptions}</select>
+                    </td>
+                    <td class="py-3 px-4 text-center">${qsIcon}</td>
+                    <td class="py-3 px-4 text-right space-x-1 whitespace-nowrap">${actionBtns}</td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        function updateMncField(id, field, value) {
+            if (!IS_ADMIN) return;
+            const mnc = mncs.find(m => m.id === id);
+            if (!mnc) return;
+            mnc[field] = value;
+            
+            if (isGoogleScriptActive) {
+                showToast("Saving changes...");
+                google.script.run
+                    .withSuccessHandler(() => { renderKanbanPipeline(); renderOverviewKPIs(); })
+                    .withFailureHandler(err => { showToast("Error: " + err.message, "ERROR"); refreshLiveDatabase(); })
+                    .saveOrUpdateMnc(mnc);
+            } else {
+                renderKanbanPipeline();
+                renderOverviewKPIs();
+                showToast(`Local update applied.`);
+            }
+        }
+
+        // ---------- FULL CRUD MODAL LOGIC ----------
+        function openAddPartnerModal() {
+            document.getElementById('partner-form').reset();
+            document.getElementById('partner-id').value = '';
+            document.getElementById('modal-title').textContent = 'Add Employer Partner';
+            document.getElementById('partner-modal').classList.remove('opacity-0', 'pointer-events-none');
+            document.getElementById('modal-card').classList.remove('scale-95');
+        }
+
+        function editPartner(id) {
+            const item = mncs.find(m => m.id === id);
+            if (!item) return;
+
+            document.getElementById('partner-id').value = item.id;
+            document.getElementById('p-name').value = item.name;
+            document.getElementById('p-industry').value = item.industry;
+            document.getElementById('p-wur').value = item.wurField;
+            document.getElementById('p-faculty').value = item.primaryFaculty;
+            document.getElementById('p-cross').value = item.crossFaculty || '';
+            document.getElementById('p-status').value = item.status;
+            document.getElementById('p-action-drp').value = item.action || 'Follow-up Required';
+            document.getElementById('p-qs').checked = item.qsNominated;
+            document.getElementById('p-contact').value = item.contactName || '';
+            document.getElementById('p-email').value = item.contactEmail || '';
+            document.getElementById('p-action-notes').value = item.lastAction || '';
+            document.getElementById('p-date').value = item.lastActionDate || '';
+
+            document.getElementById('modal-title').textContent = 'Modify Corporate Partner Record';
+            document.getElementById('partner-modal').classList.remove('opacity-0', 'pointer-events-none');
+            document.getElementById('modal-card').classList.remove('scale-95');
+        }
+
+        function closePartnerModal() {
+            document.getElementById('partner-modal').classList.add('opacity-0', 'pointer-events-none');
+            document.getElementById('modal-card').classList.add('scale-95');
+        }
+
+        function savePartner(e) {
+            e.preventDefault();
+            if (!IS_ADMIN) return;
+
+            const id = document.getElementById('partner-id').value;
+            const partnerObj = {
+                id: id ? parseInt(id) : null,
+                name: document.getElementById('p-name').value,
+                industry: document.getElementById('p-industry').value,
+                wurField: document.getElementById('p-wur').value,
+                primaryFaculty: document.getElementById('p-faculty').value,
+                crossFaculty: document.getElementById('p-cross').value,
+                status: document.getElementById('p-status').value,
+                action: document.getElementById('p-action-drp').value,
+                qsNominated: document.getElementById('p-qs').checked,
+                contactName: document.getElementById('p-contact').value,
+                contactEmail: document.getElementById('p-email').value,
+                lastAction: document.getElementById('p-action-notes').value || 'Updated details via web portal',
+                lastActionDate: document.getElementById('p-date').value || new Date().toISOString().split('T')[0]
+            };
+
+            if (isGoogleScriptActive) {
+                showToast("Writing changes to database...");
+                google.script.run
+                    .withSuccessHandler(function() {
+                        closePartnerModal();
+                        refreshLiveDatabase();
+                    })
+                    .withFailureHandler(function(err) {
+                        showToast("Failed to write to Sheet: " + err.message, "ERROR");
+                    })
+                    .saveOrUpdateMnc(partnerObj);
+            } else {
+                if (id) {
+                    const item = mncs.find(m => m.id === parseInt(id));
+                    if (item) Object.assign(item, partnerObj);
+                } else {
+                    partnerObj.id = mncs.length > 0 ? Math.max(...mncs.map(m => m.id)) + 1 : 1;
+                    mncs.push(partnerObj);
+                }
+                closePartnerModal();
+                refreshDashboard();
+            }
+        }
+
+        function deletePartner(id) {
+            if (!IS_ADMIN) return;
+            const item = mncs.find(m => m.id === id);
+            if (!item) return;
+
+            if (confirm(`Confirm deleting corporate partner record for ${item.name}?`)) {
+                if (isGoogleScriptActive) {
+                    showToast(`Removing record from Spreadsheet...`);
+                    google.script.run
+                        .withSuccessHandler(function() { refreshLiveDatabase(); })
+                        .withFailureHandler(function(err) { showToast("Failed to remove row: " + err.message, "ERROR"); })
+                        .deleteMnc(id);
+                } else {
+                    mncs = mncs.filter(m => m.id !== id);
+                    refreshDashboard();
+                }
+            }
+        }
+
+        // ---------- KANBAN PIPELINE ----------
+        function renderKanbanPipeline() {
+            const stages = { 'Targeted': 'col-targeted', 'In Discussion': 'col-discussion', 'MoU/MoA Signed': 'col-mou', 'Active Engagement': 'col-active' };
+            Object.values(stages).forEach(id => { const el = document.getElementById(id); if(el) el.innerHTML = ''; });
+            
+            mncs.forEach(m => {
+                const el = document.getElementById(stages[m.status]);
+                if (el) {
+                    const card = document.createElement('div');
+                    card.className = "bg-white p-3 rounded-lg border border-slate-200 text-xs shadow-sm flex flex-col gap-1 hover:border-unisza-blue/50 transition-colors";
+                    card.innerHTML = `
+                        <span class="font-bold text-slate-800">${m.name}</span>
+                        <div class="flex justify-between items-center text-[10px] mt-1">
+                            <span class="bg-unisza-blue/10 text-unisza-blue font-bold px-1.5 py-0.5 rounded">${m.primaryFaculty}</span>
+                            <span class="${m.qsNominated ? 'text-purple-600 font-bold' : 'text-slate-400'}">QS: ${m.qsNominated ? 'Yes':'No'}</span>
+                        </div>
+                        <div class="text-[9px] text-slate-500 mt-1 uppercase tracking-wider bg-slate-50 p-1 rounded">Act: ${m.action || 'None'}</div>
+                    `;
+                    el.appendChild(card);
+                }
+            });
+        }
+
+        // ---------- UI: RESEARCH & COLLABORATIONS ----------
+        function renderResearchKPIs() {
+            const uCollabs = researchData.universityCollaborator || [];
+            const countries = researchData.countryAffiliation || [];
+            const rRanks = researchData.rankUniversity || [];
+            
+            document.getElementById('res-stat-univs').textContent = uCollabs.length;
+            document.getElementById('res-stat-countries').textContent = countries.length;
+            const uniqueNames = new Set(rRanks.map(r => r.researcher));
+            document.getElementById('res-stat-researchers').textContent = uniqueNames.size;
+            const totalAffils = countries.reduce((acc, curr) => acc + curr.sum, 0);
+            document.getElementById('res-stat-affiliations').textContent = totalAffils.toLocaleString();
+        }
+
+        function renderResearchCharts() {
+            if (resFacultyChart) resFacultyChart.destroy();
+            if (topUnivChart) topUnivChart.destroy();
+            if (topCountryChart) topCountryChart.destroy();
+
+            const cRes = researchData.countryResearcher || [];
+            const facultyAgg = {};
+            cRes.forEach(r => { if(r.faculty) facultyAgg[r.faculty] = (facultyAgg[r.faculty] || 0) + r.count; });
+            const fLabels = Object.keys(facultyAgg).sort((a,b) => facultyAgg[b] - facultyAgg[a]);
+            const fData = fLabels.map(f => facultyAgg[f]);
+
+            const ctxFac = document.getElementById('chart-research-faculty');
+            if (ctxFac && fLabels.length > 0) resFacultyChart = new Chart(ctxFac.getContext('2d'), { type: 'doughnut', data: { labels: fLabels, datasets: [{ data: fData, backgroundColor: ['#0c3c60','#145482','#cca325','#e1b73c','#94a3b8','#cbd5e1','#475569'], borderWidth: 2 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right', labels: { boxWidth: 10, font: { size: 9 } } } } } });
+
+            let uCollabs = [...(researchData.universityCollaborator || [])].sort((a,b) => b.sum - a.sum).slice(0, 10);
+            const ctxUniv = document.getElementById('chart-research-univs');
+            if (ctxUniv && uCollabs.length > 0) topUnivChart = new Chart(ctxUniv.getContext('2d'), { type: 'bar', data: { labels: uCollabs.map(u=>u.univ), datasets: [{ data: uCollabs.map(u=>u.sum), backgroundColor: '#0c3c60', borderRadius: 4 }] }, options: { responsive: true, maintainAspectRatio: false, indexAxis: 'y', plugins: { legend: { display: false } } } });
+
+            let cCollabs = [...(researchData.countryAffiliation || [])].sort((a,b) => b.sum - a.sum).slice(0, 10);
+            const ctxCountry = document.getElementById('chart-research-countries');
+            if (ctxCountry && cCollabs.length > 0) topCountryChart = new Chart(ctxCountry.getContext('2d'), { type: 'bar', data: { labels: cCollabs.map(c=>c.country), datasets: [{ data: cCollabs.map(c=>c.sum), backgroundColor: '#cca325', borderRadius: 4 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } } });
+        }
+
+        function renderResearchTable() {
+            const tbody = document.getElementById('research-table-body');
+            if (!tbody) return;
+            const searchVal = document.getElementById('search-researcher').value.toLowerCase();
+            const filterEl = document.getElementById('filter-res-faculty');
+            const facultyVal = filterEl ? filterEl.value : 'ALL';
+            
+            let tableData = (researchData.rankUniversity || []).map(r => {
+                const matchedFac = (researchData.countryResearcher || []).find(cr => cr.researcher === r.researcher);
+                return { ...r, faculty: matchedFac ? matchedFac.faculty : 'Unknown' };
+            });
+            
+            if (facultyVal !== 'ALL') tableData = tableData.filter(r => r.faculty === facultyVal);
+            if (searchVal) tableData = tableData.filter(r => r.researcher.toLowerCase().includes(searchVal) || r.org.toLowerCase().includes(searchVal));
+            
+            tableData.sort((a, b) => b.sum - a.sum);
+            tbody.innerHTML = '';
+            tableData.slice(0, 100).forEach((item, idx) => { 
+                const tr = document.createElement('tr');
+                tr.className = "hover:bg-slate-50 transition-colors border-b border-slate-100";
+                tr.innerHTML = `
+                    <td class="py-2.5 px-4 font-bold text-slate-800 text-xs"><span class="text-[10px] text-slate-400 mr-2 w-4 inline-block">${idx+1}.</span>${item.researcher}</td>
+                    <td class="py-2.5 px-4 text-[10px] font-bold text-unisza-blue">${item.faculty}</td>
+                    <td class="py-2.5 px-4 text-xs text-slate-600">${item.org}</td>
+                    <td class="py-2.5 px-4 text-center"><span class="bg-blue-50 text-unisza-blue font-bold px-2 py-1 rounded text-xs">${item.sum}</span></td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        // ---------- FACULTY HUB MATRIX ----------
+        function selectFacultyHub(facultyCode) {
+            activeHubFaculty = facultyCode;
+            document.querySelectorAll('.hub-tab-btn').forEach(btn => {
+                btn.classList.remove('active', 'border-unisza-blue', 'text-unisza-blue', 'bg-unisza-blue/5', 'font-bold');
+                btn.classList.add('border-transparent', 'text-slate-700', 'font-medium');
+            });
+            const activeBtn = document.getElementById(`hub-btn-${facultyCode}`);
+            if (activeBtn) {
+                activeBtn.classList.add('active', 'border-unisza-blue', 'text-unisza-blue', 'bg-unisza-blue/5', 'font-bold');
+                activeBtn.classList.remove('border-transparent', 'text-slate-700', 'font-medium');
+            }
+            const facultyNames = { 'FPP': 'Fakulti Perniagaan dan Pengurusan', 'FIK': 'Fakulti Informatik dan Komputer', 'FRIT': 'Fakulti Reka Bentuk Inovatif dan Teknologi', 'FBIM': 'Fakulti Biosumber dan Industri Makanan', 'FSK': 'Fakulti Sains Kesihatan', 'FPSK': 'Fakulti Perubatan', 'FBK': 'Fakulti Bahasa dan Komunikasi', 'FSSG': 'Fakulti Sains Sosial Gunaan', 'FUHA': 'Fakulti Pengajian Umum dan Warisan Teras' };
+            const titleEl = document.getElementById('faculty-hub-title');
+            if(titleEl) titleEl.textContent = facultyNames[facultyCode] || facultyCode;
+            renderFacultyHub();
+        }
+
+        function updateFacultyBadgeCounts() {
+            const faculties = ['FPP', 'FIK', 'FRIT', 'FBIM', 'FSK', 'FPSK', 'FBK', 'FSSG', 'FUHA'];
+            faculties.forEach(fac => {
+                const count = mncs.filter(m => m.primaryFaculty === fac || (m.crossFaculty && m.crossFaculty.includes(fac))).length;
+                const badge = document.getElementById(`hub-badge-${fac}`);
+                if (badge) badge.textContent = count;
+            });
+        }
+
+        function renderFacultyHub() {
+            const fac = activeHubFaculty;
+            const primaryList = document.getElementById('hub-primary-list');
+            const crossList = document.getElementById('hub-cross-list');
+            const gapDiv = document.getElementById('faculty-hub-gap');
+            if(!primaryList || !crossList || !gapDiv) return;
+
+            primaryList.innerHTML = ''; crossList.innerHTML = '';
+            const primaries = mncs.filter(m => m.primaryFaculty === fac);
+            const crosses = mncs.filter(m => m.primaryFaculty !== fac && m.crossFaculty && m.crossFaculty.includes(fac));
+
+            document.getElementById('hub-val-active').textContent = primaries.length + crosses.length;
+            document.getElementById('hub-val-nominated').textContent = [...primaries, ...crosses].filter(m => m.qsNominated).length;
+
+            if (primaries.length === 0) primaryList.innerHTML = '<p class="text-xs text-slate-400 italic py-4">No primary account partners registered for this Faculty.</p>';
+            else primaries.forEach(item => primaryList.appendChild(createHubCard(item, true)));
+
+            if (crosses.length === 0) crossList.innerHTML = '<p class="text-xs text-slate-400 italic py-4">No cross-disciplinary ("Rentas Bidang") collaborations mapped.</p>';
+            else crosses.forEach(item => crossList.appendChild(createHubCard(item, false)));
+
+            const totalPartners = primaries.length + crosses.length;
+            const nominatedPartners = [...primaries, ...crosses].filter(m => m.qsNominated).length;
+            let gapText = '';
+            if (totalPartners === 0) gapText = `🔴 <strong>Critical Gap:</strong> ${fac} has zero active corporate relationships on record. Immediate outreach is required.`;
+            else if (nominatedPartners === 0) gapText = `🟡 <strong>Nomination Deficit:</strong> Although ${fac} has ${totalPartners} partners, <strong>0%</strong> are nominated for QS survey.`;
+            else if (nominatedPartners / totalPartners < 0.5) gapText = `💡 <strong>Improvement Opportunity:</strong> ${fac} is currently securing a ${Math.round((nominatedPartners/totalPartners)*100)}% nomination rate.`;
+            else gapText = `🟢 <strong>Strength Identified:</strong> ${fac} has outstanding employer mapping readiness.`;
+            gapDiv.innerHTML = gapText;
+        }
+
+        function createHubCard(item, isPrimary) {
+            const card = document.createElement('div');
+            card.className = "p-3 rounded-xl border border-slate-100 bg-white shadow-sm flex justify-between items-center text-xs";
+            const badge = isPrimary ? '<span class="bg-unisza-blue-light/5 text-unisza-blue-light px-2 py-0.5 rounded font-extrabold text-[9px] uppercase">Primary</span>' : `<span class="bg-unisza-gold/5 text-unisza-gold px-2 py-0.5 rounded font-extrabold text-[9px] uppercase">Rentas: ${item.primaryFaculty}</span>`;
+            const qsBadge = item.qsNominated ? '<span class="text-purple-700 bg-purple-50 px-1.5 py-0.5 rounded text-[10px] font-bold shrink-0">★ Nominated</span>' : '';
+            card.innerHTML = `<div><div class="font-bold text-slate-800">${item.name}</div><div class="text-[10px] text-slate-400 mt-0.5 leading-snug">${item.industry} | ${item.wurField}</div><div class="mt-2 flex items-center gap-2">${badge}${qsBadge}</div></div>`;
+            return card;
+        }
+
+        // ---------- ADVISORY CONSOLE ----------
+        function generateAdvisoryRecommendations() {
+            const container = document.getElementById('recommendations-container');
+            if(!container) return;
+            container.innerHTML = '';
+            let recs = [];
+
+            const highValueUnnominated = mncs.filter(m => (m.status === 'Active Engagement' || m.status === 'MoU/MoA Signed') && !m.qsNominated);
+            if (highValueUnnominated.length > 0) {
+                const t = highValueUnnominated[0];
+                recs.push({ priority: 'HIGH', title: `Secure QS Consent`, desc: `<strong>${t.name}</strong> is pending consent nomination. Ask <strong>${t.contactName || 'the CEO'}</strong> for registration consent.`, action: `Send Request` });
+            }
+
+            const wurFields = ["Arts and Humanities", "Business and Economics", "Computer Science", "Engineering and Technology", "Clinical and Health", "Life Sciences"];
+            let criticalEmptySubject = null;
+            for (let f of wurFields) { if (mncs.filter(m => m.wurField === f).length === 0) { criticalEmptySubject = f; break; } }
+            if (criticalEmptySubject) recs.push({ priority: 'HIGH', title: `${criticalEmptySubject} Gap`, desc: `0 industry partnerships mapped to the <strong>${criticalEmptySubject}</strong> area. Target relationships to support subject ranking.`, action: `Target Sector` });
+
+            const targetedCount = mncs.filter(m => m.status === 'Targeted' || m.status === 'In Discussion').length;
+            if (targetedCount > 5) recs.push({ priority: 'MEDIUM', title: `Formalize Pending MoUs`, desc: `We have <strong>${targetedCount}</strong> corporate targets in discussions. Task ILO to formalize these.`, action: `Review Database` });
+
+            if (recs.length === 0) recs.push({ priority: 'STRENGTH', title: `All Systems Green`, desc: `Your industrial portfolio satisfies subject distribution KPIs and holds solid QS nomination readiness.`, action: `View Checklist` });
+
+            recs.slice(0, 3).forEach(rec => {
+                const card = document.createElement('div');
+                let borderClass = rec.priority === 'HIGH' ? 'border-rose-100 bg-rose-50/20' : rec.priority === 'MEDIUM' ? 'border-amber-100 bg-amber-50/25' : 'border-green-100 bg-green-50/30';
+                let tagClass = rec.priority === 'HIGH' ? 'bg-rose-100 text-rose-800' : rec.priority === 'MEDIUM' ? 'bg-amber-100 text-amber-800' : 'bg-green-100 text-green-800';
+                card.className = `p-4 rounded-xl border ${borderClass} flex flex-col justify-between shadow-sm`;
+                card.innerHTML = `
+                    <div class="space-y-2"><span class="text-[9px] font-black tracking-wider uppercase px-2 py-0.5 rounded ${tagClass}">${rec.priority} PRIORITY</span><h4 class="font-bold text-slate-800 text-xs">${rec.title}</h4><p class="text-[10px] text-slate-600 leading-relaxed">${rec.desc}</p></div>
+                    <button onclick="switchTab('${rec.priority === 'HIGH' ? 'planner' : 'registry'}')" class="mt-4 text-left text-[10px] font-extrabold text-unisza-blue-light hover:text-unisza-blue transition">Execute Action &rsaquo;</button>
+                `;
+                container.appendChild(card);
+            });
+        }
+
+        // ---------- IMPORT / EXPORT CSV UTILITIES ----------
+        function handleFileSelect(event) {
+            if (!IS_ADMIN) return;
+            const file = event.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const rows = parseCSVText(e.target.result);
+                if (rows.length <= 1) { showToast("Empty CSV file.", "ERROR"); return; }
+                const headers = rows[0].map(h => h.trim().toLowerCase());
+                let n=1, i=2, w=3, f=4, c=5;
+                headers.forEach((h, idx) => { if(h.includes('syarikat')||h.includes('company')) n=idx; else if(h.includes('utama')||h.includes('industry')) i=idx; else if(h.includes('wur')) w=idx; else if(h.includes('fakulti')) f=idx; else if(h.includes('rentas')) c=idx; });
+                
+                let importCount = 0;
+                for (let j = (!isNaN(parseInt(rows[0][0])) && rows[0][1] ? 0 : 1); j < rows.length; j++) {
+                    const r = rows[j]; if (r.length < 3 || !r[n]) continue;
+                    let rawWur = r[w] ? r[w].trim() : 'Business and Economics';
+                    if (rawWur.toLowerCase().includes('art')) rawWur = "Arts and Humanities"; else if (rawWur.toLowerCase().includes('computer')) rawWur = "Computer Science"; else if (rawWur.toLowerCase().includes('engineering')) rawWur = "Engineering and Technology"; else if (rawWur.toLowerCase().includes('clinical')) rawWur = "Clinical and Health"; else if (rawWur.toLowerCase().includes('life')) rawWur = "Life Sciences";
+                    
+                    mncs.push({ id: mncs.length+1, name: r[n].trim(), industry: r[i]?r[i].trim():'General', wurField: rawWur, primaryFaculty: r[f]?r[f].trim().toUpperCase().replace(/[^A-Z]/g,''):'FPP', crossFaculty: r[c]?r[c].trim():'', status: 'Targeted', action: 'Initial Outreach', qsNominated: false, contactName: '', contactEmail: '', lastAction: 'CSV Import', lastActionDate: new Date().toISOString().split('T')[0] });
+                    importCount++;
+                }
+                if (importCount > 0) { showToast(`Import Success: Mapped ${importCount} MNC records.`); refreshDashboard(); }
+            };
+            reader.readAsText(file);
+        }
+
+        function parseCSVText(text) {
+            let delimiter = (text.split('\n')[0].match(/;/g) || []).length > (text.split('\n')[0].match(/,/g) || []).length ? ';' : ',';
+            const lines = []; let row = [""], inQuotes = false;
+            for (let i = 0; i < text.length; i++) {
+                const c = text[i], next = text[i+1];
+                if (c === '"') { if (inQuotes && next === '"') { row[row.length - 1] += '"'; i++; } else inQuotes = !inQuotes; } 
+                else if (c === delimiter && !inQuotes) row.push(''); 
+                else if ((c === '\r' || c === '\n') && !inQuotes) { if (c === '\r' && next === '\n') i++; lines.push(row); row = ['']; } 
+                else row[row.length - 1] += c;
+            }
+            if (row.length > 1 || row[0] !== '') lines.push(row);
+            return lines;
+        }
+
+        function exportDatabase() {
+            const headers = ["ID", "Company", "Industry", "WUR Field", "Faculty", "Cross-Discipline", "Status", "Action", "QS Nominated", "Contact Name", "Contact Email", "Last Action", "Action Date"];
+            let csvContent = headers.map(h => `"${h}"`).join(",") + "\n";
+            mncs.forEach(item => {
+                const row = [item.id, item.name||'', item.industry||'', item.wurField||'', item.primaryFaculty||'', item.crossFaculty||'', item.status||'Targeted', item.action||'', item.qsNominated?'Yes':'No', item.contactName||'', item.contactEmail||'', item.lastAction||'', item.lastActionDate||''];
+                csvContent += row.map(val => `"${String(val).replace(/"/g, '""')}"`).join(",") + "\n";
+            });
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement("a"); link.setAttribute("href", URL.createObjectURL(blob)); link.setAttribute("download", "UniSZA_Employer_Database.csv");
+            document.body.appendChild(link); link.click(); document.body.removeChild(link);
+            showToast("Database downloaded successfully.");
+        }
+
+        function copyTemplate(elemId) {
+            const textToCopy = document.getElementById(elemId).innerText;
+            const textarea = document.createElement('textarea'); textarea.value = textToCopy; document.body.appendChild(textarea); textarea.select();
+            try { document.execCommand('copy'); showToast("Template copied to clipboard!"); } catch(e) { showToast("Failed to copy.", "ERROR"); }
+            document.body.removeChild(textarea);
+        }
+
+        function showToast(message, type = "SUCCESS") {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            let bgClass = type === "ERROR" ? "bg-rose-950 border-rose-900 text-rose-400" : "bg-slate-900 border-slate-800 text-green-400";
+            toast.className = `p-4 rounded-xl border text-white text-xs font-semibold shadow-2xl flex items-center gap-2.5 min-w-[280px] justify-between transition-all duration-300 transform translate-y-2 opacity-0 ${bgClass}`;
+            toast.innerHTML = `<div class="flex items-center gap-2"><span class="w-2 h-2 rounded-full bg-current"></span><span>${message}</span></div>`;
+            container.appendChild(toast);
+            setTimeout(() => toast.classList.remove('translate-y-2', 'opacity-0'), 10);
+            setTimeout(() => { toast.classList.add('opacity-0', 'translate-y-2'); setTimeout(() => toast.remove(), 300); }, 4500);
+        }
+    </script>
+</body>
+</html>
